@@ -116,7 +116,12 @@ pcb-defect-detection/          # git repo root
 驗收：`uv run pytest -v` 全綠；push 後 Actions 綠。
 
 **步驟 4 — 跑真資料**：`prepare --strategy grouped`（一次性 ~2GB 下載，之後 kagglehub 快取共用）；再跑 `--strategy random --out data/pcb_random`。
-驗收：conversion_report 693/2,953、warning 清單（預期 ~0）；split_report 表格（grouped：8/1/1 板、約 555/69/69 張、每類每 split 皆有）；抽 2 張圖對照 label 檔。
+驗收：conversion_report 693/2,953、warning 清單（預期 ~0）；split_report 表格；抽 2 張圖對照 label 檔。
+
+**【2026-07-06 實測結果】**：
+- grouped：8 板 train（05,06,07,08,09,10,11,12）/ 1 板 val（01）/ 1 板 test（04）。**實際張數 453/120/120，即 65/17/17，遠比原計畫假設的「約 555/69/69」懸殊**——10 片板並非均分：板 01、板 04 各自就有 120 張（各佔全部 693 張的 17.3%），其餘 8 板平均僅 56.6 張/板。這印證且量化了 §6 風險表「單板 val/test 變異大」的疑慮，程度比預期更大；README 的限制章節須明確寫出這個真實比例，不能只講「約 80/10/10」。每類在三個 split 都有涵蓋（missing_hole/mouse_bite/open_circuit/short/spur/spurious_copper 各 20 張於 val 與 test）。conversion warnings = 0。
+- random：549/72/72（≈79/10/10，與假設吻合），warnings = 0。
+- 兩張圖（train `07_spur_05.jpg`、val `01_missing_hole_20.jpg`）以 label 反畫框，紅框精準落在瑕疵上，VOC→YOLO 座標轉換於真實資料驗證通過。
 
 **步驟 5 — EDA**（`stats.py`）：每類每 split 圖/框數表；bbox 絕對＋相對尺寸分布；**bbox-at-640 直方圖**（`box_px * 640 / max(W,H)`，預期中位數落在 10–25px 小物件區）。輸出 `reports/stats.md`＋PNG（進 git）。
 驗收：stats.md＋一段引用實際中位數的 imgsz/SAHI 論證（之後貼進 README）。
