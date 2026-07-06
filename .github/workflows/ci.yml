@@ -1,0 +1,17 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # base + dev group only - the [train] extra (torch) is never installed in CI
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run pytest -v

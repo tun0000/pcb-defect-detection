@@ -18,3 +18,5 @@ weights/
 # notebooks / tooling noise
 .ipynb_checkpoints/
 wandb/
+.pytest_cache/
+.ruff_cache/
