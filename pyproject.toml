@@ -25,6 +25,11 @@ dev = [
     "matplotlib>=3.8",
     "numpy>=1.26",
 ]
+eval = [
+    "onnx>=1.16",
+    "onnxruntime>=1.20",
+    "onnxslim>=0.1",
+]
 
 [tool.uv]
 # cu126 index has no macOS wheels; lock only for the platforms we actually use.

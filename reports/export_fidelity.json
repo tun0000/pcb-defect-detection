@@ -1,0 +1,69 @@
+{
+  "onnx_path": "exports\\best.onnx",
+  "file_size_mb": 36.41,
+  "pt": {
+    "map50": 0.8389959409308317,
+    "map5095": 0.38813421313469004,
+    "per_class": {
+      "missing_hole": {
+        "ap50": 0.9805535383394344,
+        "ap5095": 0.5824824497602291
+      },
+      "mouse_bite": {
+        "ap50": 0.9361706281491372,
+        "ap5095": 0.4562704758519274
+      },
+      "open_circuit": {
+        "ap50": 0.8962536726839053,
+        "ap5095": 0.49601550266942135
+      },
+      "short": {
+        "ap50": 0.5649117569788021,
+        "ap5095": 0.12815699101790806
+      },
+      "spur": {
+        "ap50": 0.8631622284641647,
+        "ap5095": 0.39822824398798584
+      },
+      "spurious_copper": {
+        "ap50": 0.7929238209695469,
+        "ap5095": 0.26765161552066863
+      }
+    }
+  },
+  "onnx": {
+    "map50": 0.809429824543777,
+    "map5095": 0.38669239852805753,
+    "per_class": {
+      "missing_hole": {
+        "ap50": 0.9699860805612555,
+        "ap5095": 0.5920271821796328
+      },
+      "mouse_bite": {
+        "ap50": 0.9386245898581773,
+        "ap5095": 0.458057342398011
+      },
+      "open_circuit": {
+        "ap50": 0.8852841825956432,
+        "ap5095": 0.48763282088701665
+      },
+      "short": {
+        "ap50": 0.491988638820341,
+        "ap5095": 0.1253031516135053
+      },
+      "spur": {
+        "ap50": 0.8374729546177513,
+        "ap5095": 0.3946082329873468
+      },
+      "spurious_copper": {
+        "ap50": 0.733222500809493,
+        "ap5095": 0.2625256611028329
+      }
+    }
+  },
+  "delta_map50": -0.029566116387054753,
+  "delta_map5095": -0.0014418146066325077,
+  "fidelity_threshold": 0.02,
+  "fidelity_ok": false,
+  "note": "mAP50-95 is near-identical (this is the robust signal); mAP50 shows a gap concentrated in the already-weakest classes (short, spurious_copper, spur). Box-level diagnostic (pt vs onnx on several 'short' test images at conf=0.25) found coordinates near-identical (sub-pixel deltas) and identical box counts - only classification confidence shows a small, per-class-systematic shift (~0.04-0.08). This matches PyTorch's ONNX exporter warning about the advanced-indexing decomposition used by YOLO26's end2end (NMS-free) head (see ultralytics issue #23756): a known, explainable FP32-export numerical characteristic, not a broken export. Kept end2end=True (NMS-free) rather than trading it for a marginally higher mAP50, since NMS-free deployment is a deliberate project goal (see plan.md SS0)."
+}
