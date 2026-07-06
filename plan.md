@@ -159,6 +159,14 @@ pcb-defect-detection/          # git repo root
 **2.1 評估**（`scripts/evaluate.py`）：對 `weights/grouped/best.pt` 跑 `model.val(split="test", imgsz=640, conf=0.001, iou=0.7, plots=True)`（`split="test"` 明寫）；輸出 `reports/test_metrics.json`（mAP50、mAP50-95、每類 AP/P/R——README/model card/benchmark 的單一數據源）；對 `weights/random/best.pt` 在其自己的 random test split 上同樣評估 → **洩漏對照表**（附「兩者 test set 不同」的方法學註記）。可視化選圖**反挑櫻桃**：greedy IoU≥0.5 配對算每張 TP/FP/FN/F1 → good 取 F1 最高（每類最多 1 張）、bad 優先 FN>0（漏檢 = AOI escape）再 FP 重（誤殺），tie-break 檔名——完全確定性。輸出 3×3 grid（綠 GT、彩色預測、逐格 TP/FP/FN 標註）。
 驗收：test_metrics.json、洩漏對照表、混淆矩陣/PR 圖入 `assets/figures/`、9 宮格＋選圖規則一句話。
 
+**【2026-07-07 實測結果與偏離】**：
+- **本機 GPU 仍未解決**（`cudaErrorDevicesUnavailable` 依舊），沿用 `CUDA_VISIBLE_DEVICES=-1` 繞過，CPU 上跑 120+72 張圖的 test 評估約 2–3 分鐘，速度可接受。
+- **實測數字**：grouped mAP50=0.8390 / mAP50-95=0.3881；random mAP50=0.9603 / mAP50-95=0.5082。洩漏幅度 +12.1 個百分點（mAP50）。**每類別差距最大的是 `short`（grouped 0.565 → random 0.995，+0.430）**——模型在隨機切分下對 short 類別「作弊」最嚴重；這個發現同時被反挑櫻桃選圖獨立印證（9 宮格的 5 張 bad 案例中有 4 張是 short），兩個獨立分析互相驗證，是很好的 README 素材。
+- **踩到並修掉 3 個真問題**：
+  1. 反挑櫻桃選圖的「類別多樣性」判斷誤把模型的假陽性預測類別也算進 `cls_ids`，導致只選到 1 張 good（應該 4 張）。改為只用 GT 的真實類別判斷多樣性，假陽性只影響 F1、不影響多樣性。
+  2. 複製 PR 曲線圖時檔名寫錯：ultralytics 偵測任務的實際檔名有 `Box` 前綴（`BoxPR_curve.png`），不是 `PR_curve.png`，原本的判斷式默默跳過、從未複製成功。已修正。
+  3. **Windows 端間歇性 `PermissionError`**：這台機器同時登記 Windows Defender 與 Avast 兩套防毒，覆寫既有檔案（不是新建）時會被防毒的行為/勒索軟體防護攔截，新建檔案則不受影響（包含 ultralytics 自己內部存圖也中招過一次）。修法：`evaluate.py` 的 `main()` 一開始就主動刪除上一輪的所有輸出（`reports/val_*`、`assets/figures/{tag}_*`），確保整個腳本執行期間所有寫入永遠是「建立新檔案」而非「覆寫」——不用改防毒設定，順便讓腳本本身冪等可重跑。**此問題可能在後續步驟（export/benchmark/SAHI）重複出現，若遇到同樣的 PermissionError，優先考慮同樣的「先刪後寫」策略。**
+
 **2.2 匯出**（`scripts/export_models.py`）：本機出 ONNX：`format='onnx', imgsz=640, batch=1, dynamic=False, simplify=True`（e2e 預設）。TensorRT 移至 `benchmark_colab.ipynb`（T4 上 `quantize=16` 與 `quantize=8`＋`data=…` 校準、`fraction=1.0`；#23756 警告屬 cosmetic）。每個匯出物在 test split 跑 val 記 `export_fidelity`；INT8 掉 >2 點 mAP 就只出 FP16 並在 README 說明原因。engine 是裝置綁定——只在 T4 產生、benchmark、丟棄；HF 只上傳 .pt/.onnx。
 驗收：exports/best.onnx；fidelity 差 ≤2 點。
 
