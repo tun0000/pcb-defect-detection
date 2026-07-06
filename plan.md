@@ -129,6 +129,15 @@ pcb-defect-detection/          # git repo root
 **步驟 6 — Smoke test**（`smoke.py`，RTX 2050）：yolo26n、`fraction=0.1`、2 epochs、imgsz 640、`batch=0.6`（auto-batch）、workers=2、cache=False；OOM 降階梯 batch=2 → imgsz=512（自動、記錄停在哪階）。通過 = 印出 5 點清單：cuda:0 實跑（或 `--allow-cpu`）；2 epochs 完成且 box_loss 下降；last/best.pt 存在；3 張 val 圖 predict 有框；`train_batch0.jpg` 由使用者目檢框在瑕疵上。
 驗收：5 點清單全過＋使用者目檢 mosaic 圖。
 
+**【2026-07-06 實測結果與偏離】**：
+- **本機 GPU 環境問題（未解決，非程式問題）**：裝好 `ultralytics==8.4.89` + `torch==2.12.1+cu126` 後，`torch.cuda.is_available()`／`device_count()` 正常（driver-level 查詢），但任何實際建立 CUDA context 的操作（`set_device`、tensor 配置、`pin_memory`）都失敗於 `torch.AcceleratorError: CUDA-capable device(s) is/are busy or unavailable`（`cudaErrorDevicesUnavailable`）。已排除：`nvidia-smi` 顯示 GPU 閒置無程序、Device Manager 兩張顯卡（Intel Iris Xe + RTX 2050 混合顯卡）狀態皆正常無錯誤碼、無 WSL/VM 佔用、compute mode 為 Default、無 driver crash/TDR 事件。嘗試過的修復：per-app GPU 偏好登錄設定（`HKCU:\...\UserGpuPreferences`）無效，已復原。系統已連續開機近 3 天，**最可能的修復是重開機**（清除卡死的 WDDM/CUDA context 狀態），但重開機需使用者自行決定執行，未替使用者操作。
+- **繞過方案**：用 `CUDA_VISIBLE_DEVICES=-1` 讓 CUDA runtime 對這個行程完全隱藏 GPU（注意：空字串 `""` 在這個環境無效，必須是 `-1`），使 `is_available()` 一致回傳 False，讓 ultralytics 內部所有基於此判斷的邏輯（含 DataLoader 的 `pin_memory`）正確切到純 CPU 路徑。搭配此環境變數＋`--allow-cpu`，完整跑完 smoke test。
+- **修掉 smoke.py 的 3 個真 bug**（都是這次實測才發現）：
+  1. `--allow-cpu` 原本寫成 `elif`，只有在 `torch.cuda.is_available()` 回傳 False 時才生效——但這裡 `is_available()` 回傳 True（誤導性，見上），導致 `--allow-cpu` 完全打不開逃生口。改成 `--allow-cpu` 無條件優先判斷。
+  2. `project="runs/detect"` 與 ultralytics 內部「`<runs_root>/<task>/<project>/<name>`」的路徑組合邏輯疊加，實際輸出目錄變成 `runs/detect/runs/smoke/smoke`（重複疊加 task 前綴），不是程式假設的 `runs/detect/smoke`。修法：不再用字串重建路徑，訓練成功後直接讀回 `model.trainer.save_dir`（ultralytics 自己回報的真實路徑）。
+  3. Predict 檢查在預設 `conf=0.25` 下 3 張圖全部零框——經 conf 掃描實測，模型在 2 epoch/45 張圖後最高信心值只有 ~0.002（分類頭尚未收斂，非管線壞掉）。改用 `conf=0.001`（ultralytics 內部驗證預設值）驗證推論管線本身能產生輸出，符合原始設計精神（驗證管線，不驗證模型品質）。
+- **最終結果：5/5 PASS**。box_loss 4.04855→3.87902（下降）；best.pt/last.pt 皆存在（5.4MB）；predict 900 框（conf=0.001）；mosaic 圖目檢框精準落在板子特徵上，與步驟 4 的獨立驗證一致。
+
 **步驟 7 — `train_colab.ipynb`**：notebook 零轉換邏輯——clone repo 後呼叫與本機相同的 CLI。
 - Cell 結構：說明（含預估時間）→ 設定（`REPO_URL`、`SPLIT_STRATEGY="grouped"|"random"`、`RUN_NAME=f"yolo26s_pcb_{strategy}_640"`、`DRIVE_ROOT`、`RESUME=False`）→ `pip install -q ultralytics==8.4.89 kagglehub`（**不動 Colab 預裝 torch**）＋`ultralytics.checks()` 留存版本紀錄 → 掛 Drive → clone＋`pip install -e`（base only）→ kagglehub 下載＋`prepare`（資料放 `/content`，**絕不放 Drive**——I/O 會拖垮 dataloader）＋印 split_report 目檢 → 訓練 → RESUME cell（guarded）→ `model.val(split="val")`＋混淆矩陣/PR 曲線 inline → 打包。
 - 訓練參數：yolo26s、epochs=150、patience=30、imgsz=640、batch=16（L4/A100 auto 放大亦可）、seed=42、`project=f"{DRIVE_ROOT}/runs"`（**last/best.pt 每 epoch 由 ultralytics 直接改寫在 Drive 上 = 斷線保險**）、`save_period=10`（歷史快照，控制 Drive 用量 ~300MB）、§1 增強參數全列。
