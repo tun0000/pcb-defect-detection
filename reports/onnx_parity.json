@@ -1,0 +1,267 @@
+{
+  "n_images": 10,
+  "n_passed": 9,
+  "match_iou": 0.5,
+  "iou_threshold": 0.9,
+  "conf_delta_threshold": 0.15,
+  "all_passed": false,
+  "note": "Thresholds calibrated from real data (plan.md SS 2.3), not the originally planned IoU>=0.98/|dconf|<=0.01. If any image fails here, individually inspect its per_image entry: a single failing pair with IoU still in the normal 0.93-0.99 range and both confidences clear of the 0.25 display threshold is the known FP32-export confidence-shift tail (see reports/export_fidelity.json), not a broken pipeline - historical example: 04_missing_hole_07, one pair at IoU=0.935, conf 0.6423->0.4207.",
+  "per_image": {
+    "04_missing_hole_01": {
+      "n_pt": 6,
+      "n_onnx": 6,
+      "n_matched": 6,
+      "n_unmatched_onnx": 0,
+      "n_unmatched_pt": 0,
+      "pair_ious": [
+        0.959,
+        0.9906,
+        0.9931,
+        0.9756,
+        0.9862,
+        0.9706
+      ],
+      "min_iou": 0.9590050950301379,
+      "conf_deltas": [
+        0.0044,
+        0.0154,
+        0.0274,
+        0.0493,
+        0.0897,
+        0.0782
+      ],
+      "max_conf_delta": 0.08972269296646118,
+      "passed": true
+    },
+    "04_missing_hole_02": {
+      "n_pt": 6,
+      "n_onnx": 6,
+      "n_matched": 6,
+      "n_unmatched_onnx": 0,
+      "n_unmatched_pt": 0,
+      "pair_ious": [
+        0.9847,
+        0.9945,
+        0.9869,
+        0.9734,
+        0.9773,
+        0.9678
+      ],
+      "min_iou": 0.9678038472723858,
+      "conf_deltas": [
+        0.0016,
+        0.004,
+        0.0025,
+        0.0421,
+        0.0446,
+        0.0695
+      ],
+      "max_conf_delta": 0.06952211260795593,
+      "passed": true
+    },
+    "04_missing_hole_03": {
+      "n_pt": 4,
+      "n_onnx": 4,
+      "n_matched": 4,
+      "n_unmatched_onnx": 0,
+      "n_unmatched_pt": 0,
+      "pair_ious": [
+        0.9832,
+        0.996,
+        0.9765,
+        0.9712
+      ],
+      "min_iou": 0.9711750148011963,
+      "conf_deltas": [
+        0.0013,
+        0.0008,
+        0.0438,
+        0.0719
+      ],
+      "max_conf_delta": 0.07192027568817139,
+      "passed": true
+    },
+    "04_missing_hole_04": {
+      "n_pt": 6,
+      "n_onnx": 6,
+      "n_matched": 6,
+      "n_unmatched_onnx": 0,
+      "n_unmatched_pt": 0,
+      "pair_ious": [
+        0.9836,
+        0.98,
+        0.9866,
+        0.9732,
+        0.9674,
+        0.9436
+      ],
+      "min_iou": 0.9436449584889457,
+      "conf_deltas": [
+        0.0091,
+        0.0372,
+        0.047,
+        0.0505,
+        0.0823,
+        0.0429
+      ],
+      "max_conf_delta": 0.08233842253684998,
+      "passed": true
+    },
+    "04_missing_hole_05": {
+      "n_pt": 6,
+      "n_onnx": 6,
+      "n_matched": 6,
+      "n_unmatched_onnx": 0,
+      "n_unmatched_pt": 0,
+      "pair_ious": [
+        0.9818,
+        0.9682,
+        0.9621,
+        0.9711,
+        0.9656,
+        0.9908
+      ],
+      "min_iou": 0.9620815106590122,
+      "conf_deltas": [
+        0.0021,
+        0.0247,
+        0.036,
+        0.0292,
+        0.0496,
+        0.0438
+      ],
+      "max_conf_delta": 0.049586474895477295,
+      "passed": true
+    },
+    "04_missing_hole_06": {
+      "n_pt": 6,
+      "n_onnx": 6,
+      "n_matched": 6,
+      "n_unmatched_onnx": 0,
+      "n_unmatched_pt": 0,
+      "pair_ious": [
+        0.9981,
+        0.9964,
+        0.9604,
+        0.9739,
+        0.9728,
+        0.9687
+      ],
+      "min_iou": 0.9604154728692827,
+      "conf_deltas": [
+        0.0016,
+        0.0062,
+        0.0043,
+        0.0582,
+        0.0403,
+        0.1013
+      ],
+      "max_conf_delta": 0.10132068395614624,
+      "passed": true
+    },
+    "04_missing_hole_07": {
+      "n_pt": 6,
+      "n_onnx": 6,
+      "n_matched": 6,
+      "n_unmatched_onnx": 0,
+      "n_unmatched_pt": 0,
+      "pair_ious": [
+        0.9815,
+        0.9801,
+        0.9685,
+        0.9349,
+        0.9691,
+        0.9653
+      ],
+      "min_iou": 0.9348548752180773,
+      "conf_deltas": [
+        0.0098,
+        0.003,
+        0.0594,
+        0.2216,
+        0.0452,
+        0.0818
+      ],
+      "max_conf_delta": 0.22159969806671143,
+      "passed": false
+    },
+    "04_missing_hole_08": {
+      "n_pt": 6,
+      "n_onnx": 6,
+      "n_matched": 6,
+      "n_unmatched_onnx": 0,
+      "n_unmatched_pt": 0,
+      "pair_ious": [
+        0.9949,
+        0.9644,
+        0.9822,
+        0.9729,
+        0.9696,
+        0.9667
+      ],
+      "min_iou": 0.9643999845554211,
+      "conf_deltas": [
+        0.0134,
+        0.0554,
+        0.0554,
+        0.0498,
+        0.0587,
+        0.0819
+      ],
+      "max_conf_delta": 0.08191817998886108,
+      "passed": true
+    },
+    "04_missing_hole_09": {
+      "n_pt": 6,
+      "n_onnx": 6,
+      "n_matched": 6,
+      "n_unmatched_onnx": 0,
+      "n_unmatched_pt": 0,
+      "pair_ious": [
+        0.9714,
+        0.9932,
+        0.9784,
+        0.973,
+        0.9666,
+        0.9689
+      ],
+      "min_iou": 0.9666268741991407,
+      "conf_deltas": [
+        0.0002,
+        0.0004,
+        0.0115,
+        0.0418,
+        0.0718,
+        0.031
+      ],
+      "max_conf_delta": 0.0718279778957367,
+      "passed": true
+    },
+    "04_missing_hole_10": {
+      "n_pt": 6,
+      "n_onnx": 6,
+      "n_matched": 6,
+      "n_unmatched_onnx": 0,
+      "n_unmatched_pt": 0,
+      "pair_ious": [
+        0.9785,
+        0.9974,
+        0.9899,
+        0.9739,
+        0.9745,
+        0.9683
+      ],
+      "min_iou": 0.9683014844327488,
+      "conf_deltas": [
+        0.0006,
+        0.0004,
+        0.0104,
+        0.0432,
+        0.0399,
+        0.0747
+      ],
+      "max_conf_delta": 0.07473874092102051,
+      "passed": true
+    }
+  }
+}

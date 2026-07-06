@@ -47,6 +47,17 @@ def load_yolo_labels(label_path: Path, img_w: int, img_h: int) -> list[Box]:
     return boxes
 
 
+def boxes_from_ultralytics(result) -> list[Box]:
+    """Convert one ultralytics Results object's .boxes into our Box list."""
+    xyxy_l = result.boxes.xyxy.tolist()
+    cls_l = result.boxes.cls.tolist()
+    conf_l = result.boxes.conf.tolist()
+    return [
+        Box(int(c), tuple(xyxy), float(conf))
+        for xyxy, c, conf in zip(xyxy_l, cls_l, conf_l, strict=True)
+    ]
+
+
 def iou(a: XYXY, b: XYXY) -> float:
     ix1, iy1 = max(a[0], b[0]), max(a[1], b[1])
     ix2, iy2 = min(a[2], b[2]), min(a[3], b[3])

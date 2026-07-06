@@ -29,6 +29,12 @@ eval = [
     "onnx>=1.16",
     "onnxruntime>=1.20",
     "onnxslim>=0.1",
+    # opencv: NOT added explicitly here - ultralytics ([train] extra) already pulls in
+    # opencv-python transitively, and adding opencv-python-headless alongside it would
+    # conflict (both packages own the same cv2 import namespace). e2e_onnx.py's cv2
+    # import is only ever exercised together with [train] in this repo (evaluate.py,
+    # verify_onnx_parity.py); the demo group (Phase 2.6, no ultralytics/torch) is where
+    # opencv-python-headless belongs standalone.
 ]
 
 [tool.uv]

@@ -15,7 +15,7 @@ from pathlib import Path
 from PIL import Image
 
 from pcb_defect.constants import CLASSES
-from pcb_defect.viz import Box, draw_boxes, greedy_match, load_yolo_labels
+from pcb_defect.viz import Box, boxes_from_ultralytics, draw_boxes, greedy_match, load_yolo_labels
 
 ROOT = Path(__file__).resolve().parent.parent
 FIGURES_DIR = ROOT / "assets" / "figures"
@@ -125,13 +125,7 @@ def score_test_images(model, data_yaml: Path):
             w, h = im.size
         gts = load_yolo_labels(label_dir / f"{image_path.stem}.txt", w, h)
         result = model.predict(source=str(image_path), conf=PREDICT_CONF, verbose=False)[0]
-        xyxy_l = result.boxes.xyxy.tolist()
-        cls_l = result.boxes.cls.tolist()
-        conf_l = result.boxes.conf.tolist()
-        preds = [
-            Box(int(c), tuple(xyxy), float(conf))
-            for xyxy, c, conf in zip(xyxy_l, cls_l, conf_l, strict=True)
-        ]
+        preds = boxes_from_ultralytics(result)
         match = greedy_match(preds, gts)
         # GT classes only: a false-positive prediction of another class must not count as
         # "this image occupies that class's diversity slot" - it should only hurt F1/precision.
