@@ -1,0 +1,20 @@
+# environments
+.venv/
+__pycache__/
+*.pyc
+.env
+
+# data & heavy artifacts (regenerated via scripts / brought back from Colab)
+# note: reports/ and assets/ are intentionally NOT ignored - metrics and figures are committed
+data/
+runs/
+exports/
+weights/
+*.pt
+*.onnx
+*.engine
+*.cache
+
+# notebooks / tooling noise
+.ipynb_checkpoints/
+wandb/

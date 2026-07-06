@@ -1,0 +1,183 @@
+# pcb-defect-detection — v1 執行藍圖
+
+用 Ultralytics YOLO26 做 PCB 裸板瑕疵物件偵測的求職作品集。目標讀者：台灣電子製造 / AOI 職缺面試官。
+本文件是唯一的執行依據；實作中任何偏離先回來改這裡。（藍圖定稿：2026-07-06）
+
+## 0. 價值主張（README 的核心論述，先寫在這裡對齊）
+
+- 對 AOI 產線：per-class **recall = 漏檢率（escape）**、precision = 誤殺率（false kill，決定人工複判成本）；latency 對齊產線節拍。
+- YOLO26 e2e NMS-free → 匯出的 ONNX/TensorRT 後處理只剩信心值過濾，edge 部署極簡。
+- 誠實工程：板級分組防洩漏切分＋隨機切分對照，量化「文獻數字膨脹了多少」——這是本專案最強的面試故事。
+
+## 已驗證的關鍵事實（2026-07-06，均有官方來源）
+
+- **YOLO26 已 GA**：ultralytics v8.4.0（2026-01-14）釋出正式權重；最新 8.4.89（2026-07-05）。鎖 `ultralytics==8.4.89`。e2e NMS-free 是預設；v8.4.80 起 export 用 `quantize=16/8` 新 API。DDP 多卡有 crash bug（單卡 Colab 無關）。fallback = YOLO11（API 相同，但 export 輸出需外部 NMS，介面層要抽象）。
+- **e2e ONNX 輸出 `(1, 300, 6)` = [x1,y1,x2,y2,conf,cls]**（letterbox 座標系），後處理只需信心值過濾＋letterbox 反轉，無需 NMS——CPU demo 大幅簡化，是選 YOLO26 的部署賣點。
+- **資料集**（kaggle akhatova/pcb-defects，~2.0 GB，匿名 kagglehub 可下載，已逐檔驗證）：`PCB_DATASET/` 下 693 張標註圖（每類 115–116 張）＋ 693 個 VOC XML＋ **2,953 個 bbox**（每類 482–503，類別平衡）。**10 片模板裸板**（`PCB_USED/`），檔名前綴 = 板號且**不連續**（01, 04, 05…）。`rotation/` 是 693 張**無標註**旋轉副本——必須排除。XML `<name>` 小寫底線（`missing_hole`），資料夾大寫開頭（`Missing_hole`）——大小寫不敏感比對。解析度**每板不同**（2240–3056 × 1586–2530），不可寫死。`<path>` 欄位是上傳者本機路徑——忽略。
+- **SAHI 0.12+ 官方支援 YOLO26**（ultralytics 官方 guide；SAHI 自己做切片合併，NMS-free 不衝突）。鎖 `sahi>=0.12.1`。
+- **HF Space 免費層**：CPU Basic 2 vCPU / 16 GB；Gradio 已是 6.x（6.19.0）——別抄 5.x 範例；用 `opencv-python-headless`。
+- **授權**：ultralytics AGPL-3.0 覆蓋程式與微調權重 → repo 與 HF 權重都掛 `agpl-3.0`，model card 註明商用需 Ultralytics Enterprise License。
+- **本機**：RTX 2050 4GB（Ampere SM 8.6）、driver 536.99、uv 未裝、系統 Python 3.9（uv 自帶 3.11）。smoke test 用 auto-batch（`batch=0.6`），OOM 降階梯 batch=2 → imgsz=512。
+
+## 已確認的專案決策
+
+| 決策 | 選擇 |
+|---|---|
+| GPU benchmark 位置 | Colab T4（本機只量 CPU ONNX latency） |
+| 專案位置 | `pcb-defect-detection/` 為 git repo root |
+| README 語言 | 繁中為主（程式註解、model card 英文） |
+| Colab 方案 | Pro（L4/A100 訓練；benchmark 固定選 T4 runtime） |
+| 切分策略 | **板級分組 8/1/1 為主 ＋ 隨機 80/10/10 對照**（兩次訓練，量化洩漏幅度） |
+
+## 1. 鎖定的技術決策
+
+| 項目 | 決定 | 理由 |
+|---|---|---|
+| Python | 本機 **3.13**（uv 管理，`.python-version`）；程式碼維持 3.11+ 相容（`requires-python = ">=3.11"`，不得用 3.12/3.13-only 語法） | 【2026-07-06 實測修訂】原定 3.11，但本機 repo 路徑含中文：Python ≤3.12 的 `site` 模組用 cp950 讀 editable install 的 `.pth`（內含 UTF-8 中文路徑）直接 UnicodeDecodeError、venv 掛掉；3.13 起 `.pth` 改 UTF-8 優先讀取，實測通過。Colab 是 3.12 但路徑純 ASCII，不受影響 |
+| ultralytics | `==8.4.89`（pyproject 與 notebook 同一 pin） | YOLO26 GA＋export 修正齊備；含 `quantize=` 新 API |
+| 類別順序 | `missing_hole, mouse_bite, open_circuit, short, spur, spurious_copper`（id 0–5，字母序） | 單一定義於 `constants.py`；data.yaml / 測試 / demo 全部引用它 |
+| SEED | 42 | README 的重現宣稱必須是字面事實 |
+| 主切分 | **板級分組**：8 板 train / 1 板 val / 1 板 test（板號 = 檔名前綴，不連續） | 10 片模板板，隨機切分 = 背景洩漏。分組後每類須在每個 split 有實例，否則 seed+1 重試並記錄 |
+| 對照切分 | 隨機 80/10/10（stratified） | 產生「與文獻可比」的對照數字；兩次訓練並列即量化洩漏 |
+| rotation/、PCB_USED/ | 完全排除 | rotation 無 XML（693 張洩漏炸彈）；PCB_USED 是無瑕疵模板 |
+| imgsz | 640 基線；1024 列為 Colab 選配 cell | EDA 的 bbox-at-640 分布圖為書面依據；640 對齊 export/demo 路徑 |
+| 增強 | `hsv_h=0.005`（銅色/阻焊色是類別訊號，不可大改色相）、`hsv_s=0.4, hsv_v=0.4`（AOI 曝光變異要容忍）、`degrees=10`、`flipud=0.5, fliplr=0.5`（PCB 無方向性）、`mosaic=1.0`（小物件利器）、`mixup=0, copy_paste=0`（混疊板不物理、copy-paste 需 seg） | 每項都能在面試中講出領域理由 |
+| optimizer/lr | 全留 auto | YOLO26 auto-optimizer 會選 MuSGD 並覆寫手動 lr0（官方文件行為），不對抗 |
+| 部署鏈 | ONNX（本機＋HF Space CPU）；TensorRT FP16/INT8 → Colab T4 notebook | 本機是 RTX 2050 4GB，GPU benchmark 在 T4 上跑才有公信力與可比性 |
+| 授權 | 整個 repo＋HF 權重 = AGPL-3.0 | ultralytics 授權要求；README/model card 附商用需企業授權之聲明 |
+| 依賴分層 | `data_prep` 只用 stdlib+Pillow+PyYAML（零 torch）；ultralytics 進 `[train]` extra | pytest/CI 秒級完成，不拉 2.5GB torch |
+| Fallback | YOLO11（只換權重名） | 注意：YOLO11 export 需外部 NMS，推論介面層先抽象好 |
+
+**路徑風險**：repo 位於含中文/空格的上層路徑。ultralytics 已 patch imread、data.yaml 用 `yaml.safe_dump(allow_unicode=True)`＋絕對路徑；所有資料路徑走 CLI 參數，必要時 `--out C:\pcb_data` 一鍵搬家。自寫圖片 IO 一律 `np.fromfile`+`cv2.imdecode`（或 PIL）。
+
+## 2. 專案結構
+
+```
+pcb-defect-detection/          # git repo root
+├── pyproject.toml             # uv；base 依賴＋[train] extra＋dev/eval/demo groups＋cu126 torch index
+├── .python-version            # 3.11
+├── .gitignore                 # data/ runs/ exports/ weights/ *.pt *.onnx *.engine .venv/ .env
+│                              # 例外：!assets/** !reports/*.md !reports/*.json
+├── LICENSE                    # AGPL-3.0 全文
+├── README.md                  # 繁中為主；Phase 2 完成後填滿
+├── plan.md                    # 本文件
+├── src/pcb_defect/
+│   ├── constants.py           # CLASSES、SEED、板號 regex、kaggle handle
+│   ├── data_prep/
+│   │   ├── download.py        # kagglehub 匿名下載＋693/693 結構驗證 tripwire
+│   │   ├── voc.py             # XML 解析＋驗證＋類名正規化（詳 §4 步驟 2）
+│   │   ├── convert.py         # VOC→YOLO txt、複製圖片（不用 symlink）、data.yaml
+│   │   ├── split.py           # grouped / random 兩種策略
+│   │   └── prepare.py         # CLI 總管（本機與 Colab 共用同一入口）
+│   ├── stats.py               # EDA CLI → reports/stats.md＋PNG
+│   ├── smoke.py               # RTX 2050 smoke train CLI
+│   ├── e2e_onnx.py            # letterbox＋(1,300,6) 後處理（零 torch，Phase 2）
+│   └── viz.py                 # 畫框工具（Phase 2）
+├── scripts/                   # Phase 2：evaluate.py export_models.py benchmark_cpu.py
+│   │                          #          verify_onnx_parity.py sahi_experiment.py upload_hf.py
+├── notebooks/
+│   ├── train_colab.ipynb      # Phase 1 產出
+│   └── benchmark_colab.ipynb  # Phase 2 產出（T4：PyTorch/TRT FP16/INT8）
+├── app/                       # HF Space（自包含）：app.py requirements.txt README.md examples/
+├── tests/                     # fixtures/sample.xml＋sample.jpg；test_voc_convert.py test_split.py
+├── .github/workflows/ci.yml   # ruff＋pytest（不裝 torch，<1 分鐘）
+├── weights/                   # gitignored；使用者放回 best.pt 之處
+│   ├── grouped/best.pt        # 主模型（後續 export/demo/benchmark 都用它）
+│   └── random/best.pt         # 對照模型（只做 test 評估）
+├── reports/                   # 指標 JSON/MD（提交進 git）
+├── assets/figures/            # README 圖（提交進 git）
+└── data/                      # gitignored；prepare 輸出 images/ labels/ data.yaml + 報告
+```
+
+## 3. 工作節奏
+
+每個步驟做完 → 給使用者看「驗收清單」→ 確認後才進下一步。Phase 1 結束停下，使用者去 Colab 訓練（兩個 run），把兩個 best.pt 放回 `weights/` 後開始 Phase 2。
+
+## 4. Phase 1（本機）
+
+**步驟 0 — 前置**：安裝 uv（winget 或官方 ps1）；`uv python install 3.13`（原定 3.11，因 CJK 路徑 × cp950 `.pth` 問題改 3.13，見 §1）。
+驗收：`uv --version`、`uv python list` 顯示 3.13。
+
+**步驟 1 — Scaffold**：檔案樹 §2 的空殼；pyproject（base：kagglehub/pillow/pyyaml；`[train]`：ultralytics==8.4.89＋torch 走 `[[tool.uv.index]]` cu126；dev：pytest/ruff/matplotlib）；ruff（line-length 100，select E,F,I,B,UP）；git init＋首 commit。
+驗收：`uv run python -c "import pcb_defect"`、`uv run ruff check .` 乾淨、`git log --oneline` 一筆、樹狀圖符合 §2。
+
+**步驟 2 — 資料前處理程式碼**（`voc.py`/`split.py`/`convert.py`/`prepare.py`）。驗證規則：
+- 圖片路徑由結構推導（`Annotations/<Class>/<stem>.xml → images/<Class>/<stem>.jpg`），`<filename>` 只做交叉檢查（不符 = warning）；絕不信 `<path>`。
+- `<size>` 缺或為 0 → PIL 讀實際尺寸＋warning；解析度不寫死。
+- 類名大小寫不敏感正規化；未知類 = 硬錯誤。
+- bbox clamp 到圖界（位移 >2px 記 warning）；退化框丟棄＋warning；整張 0 框 = 硬錯誤（每張應有 3–6 框）。
+- YOLO 行 6 位小數，值域 (0,1] assert。
+- 總量 tripwire：**693 張 / 2,953 框**，不符即中止（防 Kaggle 改版）。
+- `grouped_split`：sorted 板號→rng(SEED) shuffle→8/1/1；每類每 split ≥1 實例，違反則 seed+1 重試（記錄實際 seed）。`random_split`：stratified 80/10/10。
+- CLI：`uv run python -m pcb_defect.data_prep.prepare --out data/pcb --strategy grouped|random --seed 42 [--raw-dir …]`，冪等（重跑先清空）。輸出 data.yaml＋`conversion_report.json`＋`split_report.json`（板→split 對映、每 split 每類的圖/框數表）。
+驗收：與步驟 3 一起看。
+
+**步驟 3 — 測試＋CI**：fixture XML 刻意涵蓋 4 個分支（乾淨框／大寫類名／越界框／退化框，`<filename>` 故意不符）；測試：解析與正規化、YOLO 行黃金值、未知類 raise、分組切分是 partition 且同 seed 冪等、不連續板號解析。CI：setup-uv → ruff → pytest（不裝 `[train]`）。
+驗收：`uv run pytest -v` 全綠；push 後 Actions 綠。
+
+**步驟 4 — 跑真資料**：`prepare --strategy grouped`（一次性 ~2GB 下載，之後 kagglehub 快取共用）；再跑 `--strategy random --out data/pcb_random`。
+驗收：conversion_report 693/2,953、warning 清單（預期 ~0）；split_report 表格（grouped：8/1/1 板、約 555/69/69 張、每類每 split 皆有）；抽 2 張圖對照 label 檔。
+
+**步驟 5 — EDA**（`stats.py`）：每類每 split 圖/框數表；bbox 絕對＋相對尺寸分布；**bbox-at-640 直方圖**（`box_px * 640 / max(W,H)`，預期中位數落在 10–25px 小物件區）。輸出 `reports/stats.md`＋PNG（進 git）。
+驗收：stats.md＋一段引用實際中位數的 imgsz/SAHI 論證（之後貼進 README）。
+
+**步驟 6 — Smoke test**（`smoke.py`，RTX 2050）：yolo26n、`fraction=0.1`、2 epochs、imgsz 640、`batch=0.6`（auto-batch）、workers=2、cache=False；OOM 降階梯 batch=2 → imgsz=512（自動、記錄停在哪階）。通過 = 印出 5 點清單：cuda:0 實跑（或 `--allow-cpu`）；2 epochs 完成且 box_loss 下降；last/best.pt 存在；3 張 val 圖 predict 有框；`train_batch0.jpg` 由使用者目檢框在瑕疵上。
+驗收：5 點清單全過＋使用者目檢 mosaic 圖。
+
+**步驟 7 — `train_colab.ipynb`**：notebook 零轉換邏輯——clone repo 後呼叫與本機相同的 CLI。
+- Cell 結構：說明（含預估時間）→ 設定（`REPO_URL`、`SPLIT_STRATEGY="grouped"|"random"`、`RUN_NAME=f"yolo26s_pcb_{strategy}_640"`、`DRIVE_ROOT`、`RESUME=False`）→ `pip install -q ultralytics==8.4.89 kagglehub`（**不動 Colab 預裝 torch**）＋`ultralytics.checks()` 留存版本紀錄 → 掛 Drive → clone＋`pip install -e`（base only）→ kagglehub 下載＋`prepare`（資料放 `/content`，**絕不放 Drive**——I/O 會拖垮 dataloader）＋印 split_report 目檢 → 訓練 → RESUME cell（guarded）→ `model.val(split="val")`＋混淆矩陣/PR 曲線 inline → 打包。
+- 訓練參數：yolo26s、epochs=150、patience=30、imgsz=640、batch=16（L4/A100 auto 放大亦可）、seed=42、`project=f"{DRIVE_ROOT}/runs"`（**last/best.pt 每 epoch 由 ultralytics 直接改寫在 Drive 上 = 斷線保險**）、`save_period=10`（歷史快照，控制 Drive 用量 ~300MB）、§1 增強參數全列。
+- RESUME：斷線後改 `RESUME=True` 再 Run all；`YOLO(last.pt); model.train(resume=True)`（資料路徑因同 seed 重建而一致）。
+- 政策 cell：**test split 在 Colab 絕不觸碰**——留給 Phase 2 本機一次性使用。
+- 打包 cell：best/last.pt、args.yaml、results.csv、混淆矩陣/PR/F1 PNG、val 預測圖 → `DRIVE_ROOT/artifacts/{RUN_NAME}/` zip＋**印 best.pt SHA-256**（Phase 2 進場驗證）。
+- 已知問題防護：單 GPU only（DDP bug #23483 註記）；不用 model.tune()。
+驗收：cell 逐項對照清單；`jupyter nbconvert --to script` 可解析。
+**→ Phase 1 停。使用者跑兩個 run（grouped、random），把兩個 best.pt 放回 `weights/`。**
+
+## 5. Phase 2（使用者帶權重回來後）
+
+**2.0 進場**：驗 SHA-256 對上 Colab 印出的值。
+
+**2.1 評估**（`scripts/evaluate.py`）：對 `weights/grouped/best.pt` 跑 `model.val(split="test", imgsz=640, conf=0.001, iou=0.7, plots=True)`（`split="test"` 明寫）；輸出 `reports/test_metrics.json`（mAP50、mAP50-95、每類 AP/P/R——README/model card/benchmark 的單一數據源）；對 `weights/random/best.pt` 在其自己的 random test split 上同樣評估 → **洩漏對照表**（附「兩者 test set 不同」的方法學註記）。可視化選圖**反挑櫻桃**：greedy IoU≥0.5 配對算每張 TP/FP/FN/F1 → good 取 F1 最高（每類最多 1 張）、bad 優先 FN>0（漏檢 = AOI escape）再 FP 重（誤殺），tie-break 檔名——完全確定性。輸出 3×3 grid（綠 GT、彩色預測、逐格 TP/FP/FN 標註）。
+驗收：test_metrics.json、洩漏對照表、混淆矩陣/PR 圖入 `assets/figures/`、9 宮格＋選圖規則一句話。
+
+**2.2 匯出**（`scripts/export_models.py`）：本機出 ONNX：`format='onnx', imgsz=640, batch=1, dynamic=False, simplify=True`（e2e 預設）。TensorRT 移至 `benchmark_colab.ipynb`（T4 上 `quantize=16` 與 `quantize=8`＋`data=…` 校準、`fraction=1.0`；#23756 警告屬 cosmetic）。每個匯出物在 test split 跑 val 記 `export_fidelity`；INT8 掉 >2 點 mAP 就只出 FP16 並在 README 說明原因。engine 是裝置綁定——只在 T4 產生、benchmark、丟棄；HF 只上傳 .pt/.onnx。
+驗收：exports/best.onnx；fidelity 差 ≤2 點。
+
+**2.3 Parity gate**（`scripts/verify_onnx_parity.py`）：10 張固定 test 圖，`YOLO(best.pt).predict` vs `e2e_onnx.py` 純 ORT 管線；配對框 IoU≥0.98、|Δconf|≤0.01。此步驟同時實證 (1,300,6) 的 letterbox 座標系與 zero-padding 列語意。**不過關，Space 不上線。**
+驗收：10/10 通過紀錄。
+
+**2.4 Benchmark**：
+- 本機（`scripts/benchmark_cpu.py`）：ORT CPU，全執行緒＋`intra_op=2`（HF 免費層代理）兩組。
+- Colab T4（`notebooks/benchmark_colab.ipynb`）：PyTorch FP32 / TRT FP16 / TRT INT8。
+- 共同方法學：100 張固定 test 圖預解碼進 RAM 循環 ×2 = 200 次、batch=1、conf 一致、warmup 30、`time.perf_counter` 計**端到端**（e2e 模型把「後處理」算在圖內，端到端才是跨後端可比數字）、CUDA 端 synchronize。輸出 `backend | precision | device | p50 | p95 | FPS(1/p50) | mAP50-95 fidelity`；表尾誠實聲明（硬體標示、勿與官方 T4 數字直比、精度不同列不同標）。
+驗收：`reports/benchmark.md` ≥4 後端＋聲明齊全。
+
+**2.5 SAHI 三臂實驗**（`scripts/sahi_experiment.py`，可在本機 RTX 2050 跑，慢沒關係）：① baseline `predict(imgsz=640)`；② SAHI 640 切片 / 0.2 重疊（對齊訓練 imgsz；128px 重疊大於最大瑕疵）；③ `predict(imgsz=1280)`（回答「SAHI 的增益是不是只是解析度」）。指標：recall（AOI 漏檢代理）/precision 整體＋每類、GT 面積**三分位**分桶 recall（HRIPCB 全是小物件，COCO 絕對分桶無意義）、每板秒數。先跑 2 張圖 smoke 驗 SAHI×YOLO26。
+驗收：`reports/sahi_ablation.md` 表＋同板對照圖（baseline 漏 vs SAHI 抓到）。
+
+**2.6 Gradio Space**（`app/`，自包含）：requirements 只有 `gradio==6.19.0, onnxruntime, opencv-python-headless, numpy, pillow, huggingface_hub`（零 torch/ultralytics）；啟動時 `hf_hub_download` 拉 ONNX、session 模組載入時建一次；UI：上傳圖、信心值滑桿 0.05–0.90（快取 (300,6) 原始輸出，拉桿不重推論）、標註圖、類別/conf/座標表、latency 字樣、`gr.Examples` 6 張（每類一張 test 圖）；README metadata：`sdk: gradio`、`sdk_version: 6.19.0`、`python_version: "3.11"`、`license: agpl-3.0`、`models:` 連結。app.py 與 e2e_onnx.py 的 ~60 行重複由 parity 測試同時覆蓋（檔頭註明）。
+驗收：本機跑通截圖 → 部署 → 免費層線上網址可用、6 examples 正常。
+
+**2.7 HF 上傳**（`scripts/upload_hf.py`）：上傳 best.pt＋best.onnx＋混淆矩陣圖；model card（英文）由 `test_metrics.json` 模板生成——不手打數字：`library_name: ultralytics`、`pipeline_tag: object-detection`、`license: agpl-3.0`、`base_model`、`model-index`（Hub 頁渲染指標）；使用範例用 `hf_hub_download`＋`YOLO(w)`（官方卡的 from_pretrained 片段有壞版本標記，不抄）；資料出處（HRIPCB, Huang & Wei arXiv:1901.08204，Kaggle 鏡像授權「Unknown」須引用論文）；限制章節；AGPL 商用聲明。
+驗收：model repo 頁面渲染正常、Space↔model 互連、乾淨環境跑通 usage snippet。
+
+**2.8 README＋收尾**：繁中主體：badges（Space/Model/AGPL/python/ultralytics/CI）→ demo.gif → 「這對 AOI 產線的價值」（§0 論述＋實測數字）→ 結果表（含洩漏對照表）→ benchmark 表 → SAHI 表 → 重現步驟（uv sync 分組、CLI、兩個 notebook 順序）→ **限制與誠實聲明**（10 片板、合成瑕疵、板級分組故不可與文獻直比、真實 AOI 域偏移、資料集授權）→ 引用。文末附英文 TL;DR 一段。GIF：ScreenToGif 錄 Space（上傳→出框→拉桿），<8MB。
+驗收：GitHub 渲染檢查、所有表格來自 reports/ 無手打數字。
+
+## 6. 風險與緩解
+
+| 風險 | 緩解 |
+|---|---|
+| 4GB VRAM smoke OOM | auto-batch 0.6 → batch=2 → imgsz=512 降階梯，記錄停點 |
+| 中文/空格路徑 | 路徑全參數化；`--out` ASCII 逃生口；自寫 IO 用 imdecode/PIL |
+| 單板 val/test 變異大 | 已知限制寫明；隨機對照 run 提供第二視角；LOBO 列 future work |
+| Colab 斷線 | last.pt 每 epoch 在 Drive＋RESUME cell |
+| Kaggle 資料集改版/消失 | 693/2,953 tripwire；README 列備援鏡像（Dataset Ninja、Roboflow、原始 repo、liuxiaolong1 鏡像） |
+| YOLO26 訓練/匯出卡死 | fallback YOLO11：推論介面先抽象（e2e vs 需 NMS 兩種輸出） |
+| Gradio 6.x API 漂移 | requirements 與 Space sdk_version 同 pin；本機先驗 |
+| INT8 校準品質 | 一律 val fidelity，掉 >2 點就砍並寫明原因 |
+
+## 7. Future work（README 一節，不做）
+
+Leave-one-board-out 10-fold（程式已支援，10× 訓練預算不划算）；imgsz=1024 完整訓練；真實 AOI 影像域適應；DeepPCB 交叉驗證；主動學習迴圈。
