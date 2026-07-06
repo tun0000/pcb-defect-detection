@@ -140,13 +140,17 @@ pcb-defect-detection/          # git repo root
 
 **步驟 7 — `train_colab.ipynb`**：notebook 零轉換邏輯——clone repo 後呼叫與本機相同的 CLI。
 - Cell 結構：說明（含預估時間）→ 設定（`REPO_URL`、`SPLIT_STRATEGY="grouped"|"random"`、`RUN_NAME=f"yolo26s_pcb_{strategy}_640"`、`DRIVE_ROOT`、`RESUME=False`）→ `pip install -q ultralytics==8.4.89 kagglehub`（**不動 Colab 預裝 torch**）＋`ultralytics.checks()` 留存版本紀錄 → 掛 Drive → clone＋`pip install -e`（base only）→ kagglehub 下載＋`prepare`（資料放 `/content`，**絕不放 Drive**——I/O 會拖垮 dataloader）＋印 split_report 目檢 → 訓練 → RESUME cell（guarded）→ `model.val(split="val")`＋混淆矩陣/PR 曲線 inline → 打包。
-- 訓練參數：yolo26s、epochs=150、patience=30、imgsz=640、batch=16（L4/A100 auto 放大亦可）、seed=42、`project=f"{DRIVE_ROOT}/runs"`（**last/best.pt 每 epoch 由 ultralytics 直接改寫在 Drive 上 = 斷線保險**）、`save_period=10`（歷史快照，控制 Drive 用量 ~300MB）、§1 增強參數全列。
+- 訓練參數：yolo26s、epochs=150、patience=30、imgsz=640、`batch=-1`（auto-batch，~60% VRAM，自動適應當次配到的 T4/L4/A100——比寫死 batch=16 更穩健，Colab Pro 不保證每次都拿到同一款 GPU）、seed=42、`project=f"{DRIVE_ROOT}/runs"`（**last/best.pt 每 epoch 由 ultralytics 直接改寫在 Drive 上 = 斷線保險**）、`save_period=10`（歷史快照，控制 Drive 用量）、§1 增強參數全列。
 - RESUME：斷線後改 `RESUME=True` 再 Run all；`YOLO(last.pt); model.train(resume=True)`（資料路徑因同 seed 重建而一致）。
-- 政策 cell：**test split 在 Colab 絕不觸碰**——留給 Phase 2 本機一次性使用。
-- 打包 cell：best/last.pt、args.yaml、results.csv、混淆矩陣/PR/F1 PNG、val 預測圖 → `DRIVE_ROOT/artifacts/{RUN_NAME}/` zip＋**印 best.pt SHA-256**（Phase 2 進場驗證）。
-- 已知問題防護：單 GPU only（DDP bug #23483 註記）；不用 model.tune()。
+- 資料準備後多一格**機器可檢查**的斷言 cell（不只印出來讓人看）：讀 `conversion_report.json`／`split_report.json`，斷言 693 張/2,953 框、每個 split 每類至少 1 張，不符合就直接 AssertionError 中止，不讓壞資料悄悄流進訓練。
+- 政策 cell：**test split 在 Colab 絕不觸碰**——留給 Phase 2 本機一次性使用；驗證 cell 明寫 `split="val"`。
+- 打包 cell：best/last.pt、args.yaml、results.csv、混淆矩陣/PR/F1/P/R curve、results.png、val 預測圖 → `DRIVE_ROOT/artifacts/{RUN_NAME}/` zip＋**印 best.pt SHA-256**（Phase 2 進場驗證）＋印出下一步操作提示（含「跑完 grouped 後記得切到 random 再跑一次」）。
+- 已知問題防護：單 GPU only（DDP bug #23483 註記於 markdown）；不用 model.tune()。
+- `REPO_URL` 需使用者自己 push 到 GitHub 後填入（config cell 有 assert 擋預設佔位字串）——AGPL-3.0 本來就要求原始碼公開，這與 portfolio 專案想公開的目標一致，未替使用者自動建立/推送 repo。
 驗收：cell 逐項對照清單；`jupyter nbconvert --to script` 可解析。
-**→ Phase 1 停。使用者跑兩個 run（grouped、random），把兩個 best.pt 放回 `weights/`。**
+
+**【2026-07-07 實測結果】**：15 個 cell（9 code + 6 markdown）生成為合法 nbformat 4.5 JSON（含 cell id，`uvx --from nbconvert jupyter-nbconvert --to script` 解析無警告無錯誤）。用 Python 直接產生 JSON（而非手刻字串轉義）避免逐字元轉義出錯。
+**→ Phase 1 完成，暫停於此。使用者跑兩個 run（grouped、random），把兩個 best.pt 放回 `weights/grouped/` 與 `weights/random/`。**
 
 ## 5. Phase 2（使用者帶權重回來後）
 

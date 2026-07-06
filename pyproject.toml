@@ -49,6 +49,9 @@ packages = ["src/pcb_defect"]
 [tool.ruff]
 line-length = 100
 src = ["src", "tests", "scripts"]
+# Colab notebooks legitimately break "imports at top of file": installs must
+# run (and packages import-check) before the import that needs them.
+extend-exclude = ["notebooks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
