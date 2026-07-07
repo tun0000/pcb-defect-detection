@@ -93,11 +93,18 @@ def postprocess(
 class OnnxYoloModel:
     """Standalone ONNX Runtime session - no torch/ultralytics dependency."""
 
-    def __init__(self, onnx_path: str | Path, providers: list[str] | None = None):
+    def __init__(
+        self,
+        onnx_path: str | Path,
+        providers: list[str] | None = None,
+        sess_options=None,  # onnxruntime.SessionOptions; untyped to avoid a module-level ort import
+    ):
         import onnxruntime as ort
 
         self.session = ort.InferenceSession(
-            str(onnx_path), providers=providers or ["CPUExecutionProvider"]
+            str(onnx_path),
+            sess_options=sess_options,
+            providers=providers or ["CPUExecutionProvider"],
         )
         self.input_name = self.session.get_inputs()[0].name
 
