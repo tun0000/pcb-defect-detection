@@ -53,6 +53,18 @@ def _badges() -> str:
     )
 
 
+def _demo_gif_block() -> str:
+    gif_path = ROOT / "assets" / "demo.gif"
+    if gif_path.exists():
+        return "![demo](assets/demo.gif)"
+    return f"""<!--
+demo GIF 待補：用 ScreenToGif（或任何錄影工具）錄下 {SPACE_URL} 的操作
+（上傳圖 → 出現偵測框 → 拖曳信心值滑桿），存成 assets/demo.gif（< 8MB），
+存好後把下面這行取消註解即可：
+![demo](assets/demo.gif)
+-->"""
+
+
 def build_readme(metrics: dict) -> str:
     grouped, random = metrics["grouped"], metrics["random"]
     leakage_gap = (random["map50"] - grouped["map50"]) * 100
@@ -70,12 +82,7 @@ def build_readme(metrics: dict) -> str:
 
 執行藍圖與所有技術決策見 [plan.md](plan.md)（含每個步驟的實測結果與偏離記錄）。
 
-<!--
-demo GIF 待補：用 ScreenToGif（或任何錄影工具）錄下 {SPACE_URL} 的操作
-（上傳圖 → 出現偵測框 → 拖曳信心值滑桿），存成 assets/demo.gif（< 8MB），
-存好後把下面這行取消註解即可：
-![demo](assets/demo.gif)
--->
+{_demo_gif_block()}
 
 ## 六類瑕疵
 

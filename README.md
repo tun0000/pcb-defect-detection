@@ -6,12 +6,7 @@
 
 執行藍圖與所有技術決策見 [plan.md](plan.md)（含每個步驟的實測結果與偏離記錄）。
 
-<!--
-demo GIF 待補：用 ScreenToGif（或任何錄影工具）錄下 https://huggingface.co/spaces/betty0/pcb-defect-detection 的操作
-（上傳圖 → 出現偵測框 → 拖曳信心值滑桿），存成 assets/demo.gif（< 8MB），
-存好後把下面這行取消註解即可：
 ![demo](assets/demo.gif)
--->
 
 ## 六類瑕疵
 
