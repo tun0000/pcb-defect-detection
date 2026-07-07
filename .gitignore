@@ -20,3 +20,6 @@ weights/
 wandb/
 .pytest_cache/
 .ruff_cache/
+
+# personal notes - not part of the public repo
+interview_prep.md
