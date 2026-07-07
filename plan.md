@@ -222,6 +222,12 @@ pcb-defect-detection/          # git repo root
 **2.6 Gradio Space**（`app/`，自包含）：requirements 只有 `gradio==6.19.0, onnxruntime, opencv-python-headless, numpy, pillow, huggingface_hub`（零 torch/ultralytics）；啟動時 `hf_hub_download` 拉 ONNX、session 模組載入時建一次；UI：上傳圖、信心值滑桿 0.05–0.90（快取 (300,6) 原始輸出，拉桿不重推論）、標註圖、類別/conf/座標表、latency 字樣、`gr.Examples` 6 張（每類一張 test 圖）；README metadata：`sdk: gradio`、`sdk_version: 6.19.0`、`python_version: "3.11"`、`license: agpl-3.0`、`models:` 連結。app.py 與 e2e_onnx.py 的 ~60 行重複由 parity 測試同時覆蓋（檔頭註明）。
 驗收：本機跑通截圖 → 部署 → 免費層線上網址可用、6 examples 正常。
 
+**【2026-07-07 實測結果與偏離】**：
+- **實作前先查證**：動手前派 agent 查證現行 Gradio API（確認 6.19.0 仍是最新版）——確認「上傳跑一次推論、拖曳滑桿只重新篩選」這個互動模式的現行寫法：`gr.Image.upload()`（只在真的上傳檔案時觸發，不含程式自己設值）＋`gr.Slider.release()`（官方文件明講建議用在「較貴的操作」，一次手勢只觸發一次，不像 `.input()` 拖曳中連續觸發）＋`gr.State`快取原始輸出。也確認 Gradio 有內建 `gr.AnnotatedImage` 元件（`(image, [(bbox, label), ...])`），比原計畫預期的手刻 PIL 畫框更好——app.py 因此比原本設計少一塊重複邏輯（不需要複製 `viz.draw_boxes()`，只需要複製 letterbox/preprocess/postprocess）。
+- **實測抓到一個真的互動 bug**：`gr.Examples` 預設點擊範例只會設定圖片元件的值，**不會**自動觸發推論——直接翻 `gradio/helpers.py` 原始碼確認：`cache_examples=False` 時必須額外設 `run_on_click=True` 才會在點擊時真的呼叫 `fn`（否則只是換圖，滑桿也拉不出結果，因為 `raw_state` 從沒被填過）。已修正並在本機用 preview 工具實際點擊驗證：點範例 → 138ms 跑出偵測 → 拖滑桿到 0.55 → 表格從 6 筆篩到 1 筆、latency 文字不變（證明沒有重新推論）。
+- **HF 上傳順序問題的解法**：2.6 在 2.7（HF 上傳）之前，但 app.py 要靠 `hf_hub_download` 拉模型——本機測試用環境變數 `MODEL_PATH_OVERRIDE` 暫時指向本機 `exports/best.onnx`（部署到真正的 HF Space 後這個變數不會被設，會走正常的 `hf_hub_download(MODEL_REPO, "best.onnx")` 路徑；`MODEL_REPO` 目前先填 GitHub repo 同名的預留值，2.7 確認 HF repo 名稱後再核對/更新）。
+- **產出**：`app/app.py`、`app/requirements.txt`、`app/README.md`（HF Space YAML frontmatter）、`app/examples/`（6 張，每類一張，決定性選檔：各類別檔名排序後第一張）。本機截圖驗證：上傳/範例→推論→標註圖+結果表+latency 全部正確，滑桿重新篩選確認不重推論。
+
 **2.7 HF 上傳**（`scripts/upload_hf.py`）：上傳 best.pt＋best.onnx＋混淆矩陣圖；model card（英文）由 `test_metrics.json` 模板生成——不手打數字：`library_name: ultralytics`、`pipeline_tag: object-detection`、`license: agpl-3.0`、`base_model`、`model-index`（Hub 頁渲染指標）；使用範例用 `hf_hub_download`＋`YOLO(w)`（官方卡的 from_pretrained 片段有壞版本標記，不抄）；資料出處（HRIPCB, Huang & Wei arXiv:1901.08204，Kaggle 鏡像授權「Unknown」須引用論文）；限制章節；AGPL 商用聲明。
 驗收：model repo 頁面渲染正常、Space↔model 互連、乾淨環境跑通 usage snippet。
 
