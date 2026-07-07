@@ -1,0 +1,36 @@
+{
+  "backend": "onnxruntime",
+  "precision": "fp32",
+  "model": "exports\\best.onnx",
+  "n_images": 100,
+  "n_cycles": 2,
+  "warmup": 30,
+  "conf": 0.25,
+  "map5095_fidelity_delta": -0.0014418146066325077,
+  "hardware": {
+    "cpu": "Intel64 Family 6 Model 154 Stepping 3, GenuineIntel",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "logical_cores": 16
+  },
+  "configs": {
+    "ort_cpu_unrestricted": {
+      "label": "ORT CPU (unrestricted)",
+      "intra_op_num_threads": 0,
+      "n_runs": 200,
+      "p50_ms": 81.48,
+      "p95_ms": 86.381,
+      "mean_ms": 81.75,
+      "fps_from_p50": 12.27
+    },
+    "ort_cpu_2thread": {
+      "label": "ORT CPU (2-thread, HF free-tier proxy)",
+      "intra_op_num_threads": 2,
+      "n_runs": 200,
+      "p50_ms": 141.305,
+      "p95_ms": 153.421,
+      "mean_ms": 142.064,
+      "fps_from_p50": 7.08
+    }
+  },
+  "note": "Timed end-to-end (preprocess + ONNX Runtime session.run + postprocess) via time.perf_counter, matching what a real CPU deployment (e.g. this project's Hugging Face Space) actually pays per request rather than just the graph- execution step. mAP50-95 fidelity is inherited from reports/export_fidelity.json: both configs run the identical best.onnx artifact, so thread count changes latency, not accuracy. The 2-thread config is a rough proxy for HF's free CPU-Basic tier (2 vCPU), not a measurement taken on that tier directly."
+}
