@@ -241,6 +241,13 @@ pcb-defect-detection/          # git repo root
 **2.8 README＋收尾**：繁中主體：badges（Space/Model/AGPL/python/ultralytics/CI）→ demo.gif → 「這對 AOI 產線的價值」（§0 論述＋實測數字）→ 結果表（含洩漏對照表）→ benchmark 表 → SAHI 表 → 重現步驟（uv sync 分組、CLI、兩個 notebook 順序）→ **限制與誠實聲明**（10 片板、合成瑕疵、板級分組故不可與文獻直比、真實 AOI 域偏移、資料集授權）→ 引用。文末附英文 TL;DR 一段。GIF：ScreenToGif 錄 Space（上傳→出框→拉桿），<8MB。
 驗收：GitHub 渲染檢查、所有表格來自 reports/ 無手打數字。
 
+**【2026-07-07 實測結果與偏離】**：
+- **實作方式**：`scripts/render_readme.py` 直接把已經生成過的 `reports/leakage_comparison.md`／`reports/benchmark.md`／`reports/sahi_ablation.md` 整段讀進來、剝掉各自的頂層標題、標題階層降一級後嵌入 README——不是重新解析 JSON 產生第二份數字，避免兩套程式碼路徑算出不一致的結果。README 本身也是程式生成（不是手寫），確保驗收條件「無手打數字」成立。
+- **抓到一個真的字碼問題**：草稿裡混進一個簡體字「请」（在限制章節，其餘全篇都是繁體）——已修正。也把一段用 `.rsplit()` 硬拆 URL 湊出 `akhatova/pcb-defects` 的醜陋寫法，改成直接 `from pcb_defect.constants import KAGGLE_DATASET`引用既有常數。
+- **Badge 驗證**：實際 curl 每個 shields.io badge URL（含帶 emoji URL-encode 的「Open in Spaces」大徽章），全部回傳 200＋`image/svg+xml`，確認語法正確會渲染，不是憑印象猜 shields.io 的跳脫規則。
+- **demo.gif**：無法自動錄製（需要人操作瀏覽器），依計畫留成 HTML 註解佔位（`<!-- -->`，GitHub 上不會顯示破圖），註解裡寫清楚怎麼補（ScreenToGif 錄 Space、存 `assets/demo.gif`、取消註解一行）——**這是唯一還沒完成的收尾項目，需要使用者手動補**。
+- **產出**：`README.md`（繁中主體＋英文 TL;DR）、`scripts/render_readme.py`。Phase 2 全部步驟（2.0–2.8）完成，僅剩 demo GIF 待使用者手動錄製補上。
+
 ## 6. 風險與緩解
 
 | 風險 | 緩解 |
