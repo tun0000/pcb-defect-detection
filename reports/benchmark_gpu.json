@@ -1,0 +1,55 @@
+{
+  "hardware": {
+    "gpu": "Tesla T4",
+    "colab_tier": "Colab Pro (T4 runtime)",
+    "ultralytics_version": "8.4.89",
+    "torch_version": "2.11.0+cu128",
+    "tensorrt_version": "11.1.0.106"
+  },
+  "n_images": 100,
+  "n_cycles": 2,
+  "warmup": 30,
+  "conf": 0.25,
+  "val_conf": 0.001,
+  "results": {
+    "pytorch_fp32_t4": {
+      "backend": "pytorch",
+      "precision": "fp32",
+      "device": "Tesla T4",
+      "n_runs": 200,
+      "p50_ms": 102.871,
+      "p95_ms": 152.837,
+      "mean_ms": 106.902,
+      "fps_from_p50": 9.72,
+      "map50": 0.8389959409308317,
+      "map5095": 0.38813421313469004
+    },
+    "tensorrt_fp16_t4": {
+      "backend": "tensorrt",
+      "precision": "fp16",
+      "device": "Tesla T4",
+      "tensorrt_version": "11.1.0.106",
+      "n_runs": 200,
+      "p50_ms": 77.711,
+      "p95_ms": 119.782,
+      "mean_ms": 85.236,
+      "fps_from_p50": 12.87,
+      "map50": 0.819142771312806,
+      "map5095": 0.3886557404868828
+    },
+    "tensorrt_int8_t4": {
+      "backend": "tensorrt",
+      "precision": "int8",
+      "device": "Tesla T4",
+      "tensorrt_version": "11.1.0.106",
+      "n_runs": 200,
+      "p50_ms": 78.959,
+      "p95_ms": 122.945,
+      "mean_ms": 88.071,
+      "fps_from_p50": 12.66,
+      "map50": 0.8000206331159134,
+      "map5095": 0.3681240347614521
+    }
+  },
+  "note": "GPU 端計時含 torch.cuda.synchronize() barrier 的端到端量測（前處理+推論+後處理），方法學與本機 scripts/benchmark_cpu.py 一致，可直接放進同一張表。TensorRT 版本/精度與 Ultralytics 官方發布的 T4 數字所用的環境、批次大小、量測方式都不一定相同，不能直接比較。INT8 的校準資料來自 data.yaml 的 train split（與這裡拿來算 fidelity 的 test split 分開，calibration 不碰 test 資料）。"
+}

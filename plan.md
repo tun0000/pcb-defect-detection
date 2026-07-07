@@ -192,6 +192,15 @@ pcb-defect-detection/          # git repo root
 - 共同方法學：100 張固定 test 圖預解碼進 RAM 循環 ×2 = 200 次、batch=1、conf 一致、warmup 30、`time.perf_counter` 計**端到端**（e2e 模型把「後處理」算在圖內，端到端才是跨後端可比數字）、CUDA 端 synchronize。輸出 `backend | precision | device | p50 | p95 | FPS(1/p50) | mAP50-95 fidelity`；表尾誠實聲明（硬體標示、勿與官方 T4 數字直比、精度不同列不同標）。
 驗收：`reports/benchmark.md` ≥4 後端＋聲明齊全。
 
+**【2026-07-07 實測結果與偏離】**：
+- **實作前先查證，不憑舊筆記猜**：規劃階段的筆記提到 ultralytics v8.4.80 起 TensorRT 匯出改用 `quantize=` 新 API，但沒有實際查過現行文件。動手寫 `benchmark_colab.ipynb` 前先派 agent 直接讀 ultralytics 目前的原始碼（`exporter.py`／`cfg/default.yaml`）與官方文件確認：`quantize=16`／`quantize=8`／`quantize=32` 分別對應 FP16/INT8/FP32（PR #24918，已在 v8.4.80 併入；舊的 `half=`/`int8=` 仍相容但已棄用），INT8 用 `data=`＋`fraction=1.0`（官方預設值，非刻意加大）做校準。也額外發現一個規劃階段沒注意到的風險：TensorRT < 8.5.0 會讓 `end2end` 匯出靜默退回非 e2e 版本——notebook 已加一格印出實際 TensorRT 版本並檢查（實測 Colab T4 上是 11.1.0.106，遠高於門檻，沒有觸發）。
+- **本機 CPU**（`scripts/benchmark_cpu.py`，i7-1260P/16 邏輯核心）：全執行緒 p50=81.48ms（FPS=12.27），2-thread proxy p50=141.31ms（FPS=7.08）。兩者跑同一個 `best.onnx`，精度沿用 `export_fidelity.json` 的 onnx 數字（mAP50-95=0.3867），執行緒數只影響速度不影響精度。
+- **Colab T4**（`notebooks/benchmark_colab.ipynb`）：PyTorch FP32 p50=102.87ms（FPS=9.72，mAP50-95=0.3881）；TensorRT FP16 p50=77.71ms（FPS=12.87，mAP50-95=0.3887）；TensorRT INT8 p50=78.96ms（FPS=12.66，mAP50-95=0.3681）。PyTorch FP32 的 mAP50/mAP50-95 與 `export_fidelity.json` 的 `.pt` 基準逐位元組相同——確認同一份權重/切分/seed，且裝置不影響精度，是預期中的一致性驗證。
+- **兩個意料之外但誠實記錄的發現**：
+  1. **INT8 在這個模型/硬體組合下沒有部署理由**：INT8 沒有比 FP16 快（-1.6%，雜訊範圍內甚至略慢），卻多犧牲 2 個百分點的 mAP50-95（超過 export_models.py 用的門檻）——INT8 被 FP16 全面壓過。沒有為了「INT8 應該更快」的預期而美化數字。
+  2. **本機 CPU（全執行緒）比 T4 的 PyTorch FP32 快 26%**：不是公平的硬體成本對比（筆電 CPU vs 資料中心 GPU），但對 batch=1 單張推論這個實際部署場景是真實數字——模型夠小，GPU 單張呼叫的額外開銷（kernel 啟動、PCIe 傳輸）稀釋掉算力優勢。這也支持了「HF Space 部署在免費 CPU 層」的既定選擇不只是省錢，這個工作負載形狀下本來就合理。
+- **產出**：`reports/benchmark_cpu.json`、`reports/benchmark_gpu.json`（Colab 貼回）、`reports/benchmark.md`（`scripts/render_benchmark_report.py` 從三份 JSON 組出表格＋分析＋誠實聲明，所有數字都是程式算出來的，沒有手打）。5 個後端，超過驗收門檻的 4 個。
+
 **2.5 SAHI 三臂實驗**（`scripts/sahi_experiment.py`，可在本機 RTX 2050 跑，慢沒關係）：① baseline `predict(imgsz=640)`；② SAHI 640 切片 / 0.2 重疊（對齊訓練 imgsz；128px 重疊大於最大瑕疵）；③ `predict(imgsz=1280)`（回答「SAHI 的增益是不是只是解析度」）。指標：recall（AOI 漏檢代理）/precision 整體＋每類、GT 面積**三分位**分桶 recall（HRIPCB 全是小物件，COCO 絕對分桶無意義）、每板秒數。先跑 2 張圖 smoke 驗 SAHI×YOLO26。
 驗收：`reports/sahi_ablation.md` 表＋同板對照圖（baseline 漏 vs SAHI 抓到）。
 
