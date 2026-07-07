@@ -9,7 +9,7 @@ app_file: app.py
 python_version: "3.11"
 license: agpl-3.0
 models:
-  - tun0000/pcb-defect-detection
+  - betty0/pcb-defect-detection
 tags:
   - object-detection
   - pcb

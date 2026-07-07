@@ -227,9 +227,16 @@ pcb-defect-detection/          # git repo root
 - **實測抓到一個真的互動 bug**：`gr.Examples` 預設點擊範例只會設定圖片元件的值，**不會**自動觸發推論——直接翻 `gradio/helpers.py` 原始碼確認：`cache_examples=False` 時必須額外設 `run_on_click=True` 才會在點擊時真的呼叫 `fn`（否則只是換圖，滑桿也拉不出結果，因為 `raw_state` 從沒被填過）。已修正並在本機用 preview 工具實際點擊驗證：點範例 → 138ms 跑出偵測 → 拖滑桿到 0.55 → 表格從 6 筆篩到 1 筆、latency 文字不變（證明沒有重新推論）。
 - **HF 上傳順序問題的解法**：2.6 在 2.7（HF 上傳）之前，但 app.py 要靠 `hf_hub_download` 拉模型——本機測試用環境變數 `MODEL_PATH_OVERRIDE` 暫時指向本機 `exports/best.onnx`（部署到真正的 HF Space 後這個變數不會被設，會走正常的 `hf_hub_download(MODEL_REPO, "best.onnx")` 路徑；`MODEL_REPO` 目前先填 GitHub repo 同名的預留值，2.7 確認 HF repo 名稱後再核對/更新）。
 - **產出**：`app/app.py`、`app/requirements.txt`、`app/README.md`（HF Space YAML frontmatter）、`app/examples/`（6 張，每類一張，決定性選檔：各類別檔名排序後第一張）。本機截圖驗證：上傳/範例→推論→標註圖+結果表+latency 全部正確，滑桿重新篩選確認不重推論。
+- **部署（2026-07-07 後續補上）**：`scripts/deploy_space.py` 把 `app/` 上傳到真正的 HF Space（`betty0/pcb-defect-detection`，public，sdk=gradio），等 build 完成（`APP_STARTING`→`RUNNING`）後用 `gradio_client` 實測：呼叫 `/run_inference` 對 `04_spur_01.jpg`，6 個偵測結果與本機測試逐項相同（第一筆 `spur 0.58 (992.7, 2057.4, 1109.9, 2125.2)` 完全一致），只有 latency 較高（898ms vs 本機 138ms，符合免費 CPU 層預期較慢）。**驗收完整達成**（本機截圖→部署→免費層線上網址可用→examples 正常）。
 
 **2.7 HF 上傳**（`scripts/upload_hf.py`）：上傳 best.pt＋best.onnx＋混淆矩陣圖；model card（英文）由 `test_metrics.json` 模板生成——不手打數字：`library_name: ultralytics`、`pipeline_tag: object-detection`、`license: agpl-3.0`、`base_model`、`model-index`（Hub 頁渲染指標）；使用範例用 `hf_hub_download`＋`YOLO(w)`（官方卡的 from_pretrained 片段有壞版本標記，不抄）；資料出處（HRIPCB, Huang & Wei arXiv:1901.08204，Kaggle 鏡像授權「Unknown」須引用論文）；限制章節；AGPL 商用聲明。
 驗收：model repo 頁面渲染正常、Space↔model 互連、乾淨環境跑通 usage snippet。
+
+**【2026-07-07 實測結果與偏離】**：
+- **環境缺口**：CLAUDE.md 記錄「Hugging Face 已登入」，但實測這台機器沒有 `huggingface-cli`、也沒有快取 token——已誠實回報給使用者，請他去 HF 網站申請 write token，存進 `.env`（`HF_TOKEN`，遵照專案既有的 API 金鑰慣例）。
+- **帳號命名落差**：驗證登入時發現 HF 使用者名稱是 `betty0`，**不是**GitHub 的 `tun0000`——原本 `app/app.py`／`app/README.md` 裡的 `MODEL_REPO`／`models:` 預留值猜錯了命名空間，已在上傳前修正為 `betty0/pcb-defect-detection`（先驗證帳號再動作，沒有憑 GitHub 帳號猜）。
+- **實作前先查證**：派 agent 查證現行 `huggingface_hub` API（`create_repo`／`upload_folder` 優於逐檔 `upload_file`，一次 commit）與 model card 的 `model-index` schema 確切欄位。也驗證了 plan.md 原本的假設「官方卡 from_pretrained 片段有問題」：`YOLO.from_pretrained()` 其實不是官方 ultralytics 套件的功能（是特定 fork/mixin 才有），`hf_hub_download`＋`YOLO(path)` 才是通用、版本無關的正確用法——確認原假設成立，不是瞎猜。額外查證 `base_model: Ultralytics/YOLO26` 這個 repo 確實存在才寫進去，沒有猜連結。
+- **上傳結果**：[huggingface.co/betty0/pcb-defect-detection](https://huggingface.co/betty0/pcb-defect-detection)。上傳後用 API 驗證：4 個檔案都在（README.md/best.onnx/best.pt/confusion_matrix.png）、`model-index` 正確解析成 mAP50=0.8390／mAP50-95=0.3881（與 `test_metrics.json` 完全一致）、`license:agpl-3.0`／`pipeline_tag:object-detection` 標籤正確。**乾淨環境驗證**：全新 `--isolated` 環境（無本機快取、無登入）跑 model card 裡的 usage snippet，成功下載＋載入＋讀出 6 個類別名稱，逐字跟 model card 上寫的一致。
 
 **2.8 README＋收尾**：繁中主體：badges（Space/Model/AGPL/python/ultralytics/CI）→ demo.gif → 「這對 AOI 產線的價值」（§0 論述＋實測數字）→ 結果表（含洩漏對照表）→ benchmark 表 → SAHI 表 → 重現步驟（uv sync 分組、CLI、兩個 notebook 順序）→ **限制與誠實聲明**（10 片板、合成瑕疵、板級分組故不可與文獻直比、真實 AOI 域偏移、資料集授權）→ 引用。文末附英文 TL;DR 一段。GIF：ScreenToGif 錄 Space（上傳→出框→拉桿），<8MB。
 驗收：GitHub 渲染檢查、所有表格來自 reports/ 無手打數字。

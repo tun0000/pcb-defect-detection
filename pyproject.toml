@@ -39,6 +39,10 @@ eval = [
 sahi = [
     "sahi>=0.12.1",  # ultralytics>=8.0.0 is its only version constraint; 8.4.89 satisfies it
 ]
+hf = [
+    "huggingface-hub>=0.24",
+    "python-dotenv>=1.0",
+]
 
 [tool.uv]
 # cu126 index has no macOS wheels; lock only for the platforms we actually use.

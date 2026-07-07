@@ -8,10 +8,10 @@ alone. scripts/verify_onnx_parity.py's parity gate covers this same logic (see
 plan.md SS 2.3/2.6): any change here should be mirrored there and re-verified.
 
 Env vars:
-    MODEL_REPO         HF model repo id to pull best.onnx from (default below).
-    MODEL_PATH_OVERRIDE  local file path - skips the HF download, for testing
-                         this Space before MODEL_REPO actually has anything
-                         uploaded to it (see plan.md SS 2.6/2.7 ordering).
+    MODEL_REPO           HF model repo id to pull best.onnx from (default below;
+                         live at https://huggingface.co/betty0/pcb-defect-detection).
+    MODEL_PATH_OVERRIDE  local file path - skips the HF download, for local dev
+                         without touching the deployed Space's default.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ import gradio as gr
 import numpy as np
 from PIL import Image
 
-MODEL_REPO = os.environ.get("MODEL_REPO", "tun0000/pcb-defect-detection")
+MODEL_REPO = os.environ.get("MODEL_REPO", "betty0/pcb-defect-detection")
 MODEL_PATH_OVERRIDE = os.environ.get("MODEL_PATH_OVERRIDE")
 
 CLASSES = ["missing_hole", "mouse_bite", "open_circuit", "short", "spur", "spurious_copper"]
