@@ -36,6 +36,9 @@ eval = [
     # verify_onnx_parity.py); the demo group (Phase 2.6, no ultralytics/torch) is where
     # opencv-python-headless belongs standalone.
 ]
+sahi = [
+    "sahi>=0.12.1",  # ultralytics>=8.0.0 is its only version constraint; 8.4.89 satisfies it
+]
 
 [tool.uv]
 # cu126 index has no macOS wheels; lock only for the platforms we actually use.
