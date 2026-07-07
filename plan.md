@@ -204,6 +204,21 @@ pcb-defect-detection/          # git repo root
 **2.5 SAHI 三臂實驗**（`scripts/sahi_experiment.py`，可在本機 RTX 2050 跑，慢沒關係）：① baseline `predict(imgsz=640)`；② SAHI 640 切片 / 0.2 重疊（對齊訓練 imgsz；128px 重疊大於最大瑕疵）；③ `predict(imgsz=1280)`（回答「SAHI 的增益是不是只是解析度」）。指標：recall（AOI 漏檢代理）/precision 整體＋每類、GT 面積**三分位**分桶 recall（HRIPCB 全是小物件，COCO 絕對分桶無意義）、每板秒數。先跑 2 張圖 smoke 驗 SAHI×YOLO26。
 驗收：`reports/sahi_ablation.md` 表＋同板對照圖（baseline 漏 vs SAHI 抓到）。
 
+**【2026-07-07 實測結果與偏離】**：
+- **實作前先查證**：動手前派 agent 查證 SAHI 目前版本（0.12.1）與 ultralytics YOLO26 的整合方式——`AutoDetectionModel.from_pretrained(model_type="ultralytics", model_path=<本機 .pt 路徑>, ...)` 直接吃本機權重，不需要 hub；e2e/NMS-free 頭完全不需要特殊處理（SAHI 只轉發 `conf`/`device`/`imgsz` 給 ultralytics 自己的 `predict()`，NMS vs 信心值過濾由 ultralytics 內部依權重自動判斷，沒有雙重 NMS 風險）。`get_sliced_prediction()` 簽名、`postprocess_type` 預設 `"GREEDYNMM"`、`BoundingBox.to_xyxy()` 等細節都直接讀原始碼確認，沒有憑印象猜。2 張圖 smoke test 一次就過（無 crash，框數合理）。
+- **測試集事實**：`data/pcb/images/test` 120 張圖全部來自**單一板號 04**（板級分組切分的結果）——「每板秒數」等同「每張圖秒數」，逐板拆解沒有意義，報告已如實註記並改回報每張圖秒數。
+- **整體結果**（120 張圖）：
+
+  | arm | recall | precision | mean sec/img |
+  |---|---|---|---|
+  | baseline (640) | 0.7654 | 0.4215 | 0.187 |
+  | SAHI (640/0.2) | 0.7737 | 0.3424 | 4.688 |
+  | hires (1280) | 0.7682 | 0.8540 | 0.417 |
+
+- **意料之外但誠實記錄的結論：SAHI 在這個資料集/模型組合下不值得部署**。SAHI 比 baseline 多抓到的 3 個 TP **全部集中在單一類別（spur）**，其餘 5 類 recall 完全沒變；代價是全類別分散多出 156 個 FP（precision 0.4215→0.3424），耗時卻是 baseline 的 25.1 倍。換算成 AOI 的說法：多背 156 次人工複判成本，只換到 3 次少漏檢。反觀單純把推論解析度拉高到 1280（沒有切片），小物件三分位 recall 的挽回幅度（+0.1250）比 SAHI（+0.0250）還大，precision 遠高於 SAHI（0.8540 vs 0.3424），只慢 2.2 倍（不是 25 倍）。**結論：如果目標是挽回小物件 recall，提高推論解析度比 SAHI 切片划算得多**——這個反直覺的負結果（沒有把 SAHI 包裝成萬靈丹）也是這個專案「誠實工程」敘事的一部分。
+- **一個留意但未深究的側記**：hires 在 `short` 類別的 recall 反而下降（0.6102→0.3729），跟其他類別走勢相反，可能與 640 訓練／1280 推論的解析度不匹配有關，沒有進一步驗證，如實記錄不做定論。
+- **產出**：`reports/sahi_ablation.md`／`reports/sahi_ablation.json`／`assets/figures/sahi_comparison.png`（決定性選圖：所有「baseline 漏、SAHI 抓到」候選中取 GT 面積最小者，`04_spur_05`）。`src/pcb_defect/viz.py` 新增 `boxes_from_sahi()`（沿用 `boxes_from_ultralytics()` 的 adapter 模式，torch-free/sahi-free，純屬性存取）。`pyproject.toml` 新增 `sahi` dependency-group。
+
 **2.6 Gradio Space**（`app/`，自包含）：requirements 只有 `gradio==6.19.0, onnxruntime, opencv-python-headless, numpy, pillow, huggingface_hub`（零 torch/ultralytics）；啟動時 `hf_hub_download` 拉 ONNX、session 模組載入時建一次；UI：上傳圖、信心值滑桿 0.05–0.90（快取 (300,6) 原始輸出，拉桿不重推論）、標註圖、類別/conf/座標表、latency 字樣、`gr.Examples` 6 張（每類一張 test 圖）；README metadata：`sdk: gradio`、`sdk_version: 6.19.0`、`python_version: "3.11"`、`license: agpl-3.0`、`models:` 連結。app.py 與 e2e_onnx.py 的 ~60 行重複由 parity 測試同時覆蓋（檔頭註明）。
 驗收：本機跑通截圖 → 部署 → 免費層線上網址可用、6 examples 正常。
 

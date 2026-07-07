@@ -1,6 +1,6 @@
 """Shared visualization: read YOLO labels, greedy IoU matching, box drawing.
 
-Used by scripts/evaluate.py (Phase 2) and later the SAHI experiment - kept
+Used by scripts/evaluate.py and scripts/sahi_experiment.py (Phase 2) - kept
 torch-free so it can be imported without the [train] extra.
 """
 
@@ -56,6 +56,15 @@ def boxes_from_ultralytics(result) -> list[Box]:
         Box(int(c), tuple(xyxy), float(conf))
         for xyxy, c, conf in zip(xyxy_l, cls_l, conf_l, strict=True)
     ]
+
+
+def boxes_from_sahi(result) -> list[Box]:
+    """Convert a sahi.prediction.PredictionResult's object_prediction_list into our Box list."""
+    boxes = []
+    for pred in result.object_prediction_list:
+        x1, y1, x2, y2 = pred.bbox.to_xyxy()
+        boxes.append(Box(int(pred.category.id), (x1, y1, x2, y2), float(pred.score.value)))
+    return boxes
 
 
 def iou(a: XYXY, b: XYXY) -> float:
